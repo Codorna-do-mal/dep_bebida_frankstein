@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './stores/authStore';
 
@@ -37,6 +37,13 @@ const ProtectedRoute = ({
 };
 
 function App() {
+  const { checkAuth } = useAuthStore();
+  
+  useEffect(() => {
+    // Check authentication status on app load
+    checkAuth();
+  }, [checkAuth]);
+  
   return (
     <Router>
       <Routes>
