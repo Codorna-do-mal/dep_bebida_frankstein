@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import Button from '../components/ui/Button';
+import logo from '../assets/images/logo_png.png';
 
 const Welcome: React.FC = () => {
   const navigate = useNavigate();
