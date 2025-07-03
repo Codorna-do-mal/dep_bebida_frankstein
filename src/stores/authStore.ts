@@ -48,7 +48,7 @@ export const useAuthStore = create<AuthState>()(
           }
 
           // Get user data from our users table
-          const { data: userData, error: userError } = await supabase
+          let { data: userData, error: userError } = await supabase
             .from('users')
             .select('*')
             .eq('auth_user_id', authData.user.id)
