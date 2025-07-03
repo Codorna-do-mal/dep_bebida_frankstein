@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import Button from '../components/ui/Button';
-import logo from '../assets/images/logo_png.png';
+import logo_png from '../assets/logo_png.png';
 
 const Welcome: React.FC = () => {
   const navigate = useNavigate();
@@ -19,7 +19,7 @@ const Welcome: React.FC = () => {
       <div className="max-w-md w-full text-center">
         <div className="flex justify-center mb-6">
           <img 
-            src="https://raw.githubusercontent.com/stackblitz/stackblitz-images/main/franks-tem-bebidas-logo.png" 
+            src={logo_png} 
             alt="Frank's Tem Bebidas Logo" 
             className="w-32 h-32 rounded-full"
           />
