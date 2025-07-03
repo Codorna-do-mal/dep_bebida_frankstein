@@ -3,17 +3,17 @@ import { Product, Employee, Sale, CashRegister, StockMovement } from '../types';
 // Mock products
 export const products: Product[] = [
   {
-    id: '1',
-    name: 'Brahma Duplo Malte',
-    category: 'Cerveja',
-    price: 4.99,
-    cost: 2.99,
-    description: 'Cerveja Brahma Duplo Malte 350ml',
-    imageUrl: 'https://images.pexels.com/photos/1552630/pexels-photo-1552630.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=750&w=1260',
-    barcode: '7891149201309',
-    volume: '350ml',
-    stockQuantity: 120,
-    minStockQuantity: 20
+    id: '',
+    name: '',
+    category: '',
+    price: 0,
+    cost: 0,
+    description: '',
+    imageUrl: '',
+    barcode: '',
+    volume: '',
+    stockQuantity: 0,
+    minStockQuantity: 0
   },
   {
     id: '2',
