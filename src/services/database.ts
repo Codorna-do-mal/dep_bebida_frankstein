@@ -757,7 +757,7 @@ export const dashboardService = {
           .from('products')
           .select('*')
           .eq('is_active', true)
-          .filter('stock_quantity', 'lte', 'min_stock_quantity')
+          .lte('stock_quantity', 10)
       );
       
       if (lowStockResult.error) {
