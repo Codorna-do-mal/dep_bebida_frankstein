@@ -757,17 +757,23 @@ const lowStockResult = await executeQuery(() =>
     .rpc('get_low_stock_products') // Consome a função
       );
       
-     if (lowStockResult.error) {
-  handleDatabaseError(lowStockResult.error, 'carregar produtos com estoque baixo');
-}
-
-return {
-  todaySales: todayTotal,
-  todayCount,
-  totalProducts: (productsResult as any).count || 0,
-  lowStockCount: lowStockResult.data?.length || 0,
-  currentCashRegister
-};
+if (lowStockResult.error) {
+        handleDatabaseError(lowStockResult.error, 'carregar produtos com estoque baixo');
+      }
+      
+      // Get current cash register
+      const currentCashRegister = await cashRegisterService.getCurrent();
+      
+      const todayTotal = salesResult.data?.reduce((sum, sale) => sum + (sale.final_amount || 0), 0) || 0;
+      const todayCount = salesResult.data?.length || 0;
+      
+      return {
+        todaySales: todayTotal,
+        todayCount,
+        totalProducts: (productsResult as any).count || 0,
+        lowStockCount: lowStockResult.data?.length || 0,
+        currentCashRegister
+      };
     } catch (error) {
       handleDatabaseError(error, 'carregar estatísticas do dashboard');
       return {
