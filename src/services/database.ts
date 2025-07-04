@@ -11,7 +11,16 @@ export type Sale = Database['public']['Tables']['sales']['Row'];
 export type SaleItem = Database['public']['Tables']['sale_items']['Row'];
 export type CashRegister = Database['public']['Tables']['cash_registers']['Row'];
 export type CashTransaction = Database['public']['Tables']['cash_transactions']['Row'];
-export type StockMovement = Database['public']['Tables']['stock_movements']['Row'];
+export type StockMovement = Database['public']['Tables']['stock_movements']['Row'] & {
+  productId?: string;
+  productName?: string;
+  type: 'in' | 'out';
+  quantity: number;
+  reason: string;
+  date?: string;
+  createdAt?: string;
+  employeeId?: string;
+};
 export type PaymentMethod = Database['public']['Tables']['payment_methods']['Row'];
 export type User = Database['public']['Tables']['users']['Row'];
 
@@ -49,13 +58,13 @@ export const productsService = {
     if (error) throw error;
     
     // Create initial stock movement
-    if (data && product.stock_quantity > 0) {
+    if (data && product.stock_quantity && product.stock_quantity > 0) {
       await stockMovementsService.create({
         product_id: data.id,
         type: 'in',
         quantity: product.stock_quantity,
         reason: 'Estoque inicial',
-        employee_id: product.employee_id || null
+        employee_id: (product as any).employee_id || null
       });
     }
     
@@ -331,7 +340,16 @@ export const stockMovementsService = {
       .order('created_at', { ascending: false });
     
     if (error) throw error;
-    return data || [];
+    
+    // Transform data to match expected format
+    return (data || []).map(movement => ({
+      ...movement,
+      productId: movement.product_id,
+      productName: (movement as any).products?.name || 'Produto não encontrado',
+      date: movement.created_at,
+      createdAt: movement.created_at,
+      employeeId: movement.employee_id
+    }));
   },
 
   async create(movement: Database['public']['Tables']['stock_movements']['Insert']) {
@@ -342,7 +360,16 @@ export const stockMovementsService = {
       .single();
     
     if (error) throw error;
-    return data;
+    
+    // Transform data to match expected format
+    return {
+      ...data,
+      productId: data.product_id,
+      productName: '',
+      date: data.created_at,
+      createdAt: data.created_at,
+      employeeId: data.employee_id
+    };
   },
 
   async getByProduct(productId: string) {

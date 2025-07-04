@@ -5,8 +5,7 @@ import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import { Search, ArrowUp, ArrowDown, Plus, X, Loader2 } from 'lucide-react';
-import { Product, StockMovement } from '../types';
-import { productsService, stockMovementsService } from '../services/database';
+import { productsService, stockMovementsService, type Product, type StockMovement } from '../services/database';
 import { useAuthStore } from '../stores/authStore';
 
 const Inventory: React.FC = () => {
@@ -50,7 +49,7 @@ const Inventory: React.FC = () => {
   // Filter movements based on search, product, and type
   const filteredMovements = stockMovements.filter((movement) => {
     const product = products.find(p => p.id === movement.productId);
-    const productName = product?.name || '';
+    const productName = product?.name || movement.productName || '';
     const matchesSearch = productName.toLowerCase().includes(search.toLowerCase());
     const matchesProduct = selectedProduct ? movement.productId === selectedProduct : true;
     const matchesType = selectedType ? movement.type === selectedType : true;
@@ -82,11 +81,11 @@ const Inventory: React.FC = () => {
 
     try {
       const movementData = {
-        productId: newMovement.productId,
+        product_id: newMovement.productId,
         type: newMovement.type as 'in' | 'out',
         quantity: newMovement.quantity as number,
         reason: newMovement.reason as string,
-        employeeId: user.id,
+        employee_id: user.id,
       };
 
       const createdMovement = await stockMovementsService.create(movementData);
@@ -241,9 +240,9 @@ const Inventory: React.FC = () => {
                 return (
                   <tr key={movement.id} className="border-b border-dark-lighter hover:bg-dark-lighter">
                     <td className="px-4 py-3 text-sm">
-                      {new Date(movement.createdAt || movement.date).toLocaleString('pt-BR')}
+                      {new Date(movement.createdAt || movement.date || '').toLocaleString('pt-BR')}
                     </td>
-                    <td className="px-4 py-3">{product?.name || 'Produto não encontrado'}</td>
+                    <td className="px-4 py-3">{product?.name || movement.productName || 'Produto não encontrado'}</td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                         movement.type === 'in' 
