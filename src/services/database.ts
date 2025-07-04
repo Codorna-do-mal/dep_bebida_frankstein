@@ -416,7 +416,7 @@ export const cashRegisterService = {
           .eq('status', 'open')
           .order('created_at', { ascending: false })
           .limit(1)
-          .maybeSingle()
+          .single()
       );
       
       if (result.error && result.error.code !== 'PGRST116') {
