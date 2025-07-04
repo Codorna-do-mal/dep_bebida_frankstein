@@ -1,30 +1,46 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Layout from '../components/layout/Layout';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import { Search, Plus, Edit, Trash2, UserPlus, Save, X } from 'lucide-react';
-import { employees as mockEmployees } from '../data/mockData';
-import { Employee } from '../types';
+import { usersService, type User } from '../services/database';
 import { format } from 'date-fns';
 
 const Employees: React.FC = () => {
-  const [employees, setEmployees] = useState<Employee[]>(mockEmployees);
+  const [employees, setEmployees] = useState<User[]>([]);
   const [search, setSearch] = useState('');
-  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const [editingEmployee, setEditingEmployee] = useState<User | null>(null);
   const [isAddingEmployee, setIsAddingEmployee] = useState(false);
+  const [loading, setLoading] = useState(true);
   
-  const initialNewEmployee: Employee = {
-    id: '',
+  const initialNewEmployee: Partial<User> = {
     name: '',
     email: '',
     phone: '',
     role: 'funcionario',
-    hireDate: format(new Date(), 'yyyy-MM-dd')
+    hire_date: format(new Date(), 'yyyy-MM-dd'),
+    is_active: true
   };
   
-  const [newEmployee, setNewEmployee] = useState<Employee>(initialNewEmployee);
+  const [newEmployee, setNewEmployee] = useState<Partial<User>>(initialNewEmployee);
+  
+  // Fetch employees on component mount
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      try {
+        const data = await usersService.getAll();
+        setEmployees(data);
+      } catch (error) {
+        console.error('Error fetching employees:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchEmployees();
+  }, []);
   
   // Filter employees based on search
   const filteredEmployees = employees.filter((employee) =>
@@ -32,24 +48,34 @@ const Employees: React.FC = () => {
     employee.email.toLowerCase().includes(search.toLowerCase())
   );
   
-  const handleSaveEmployee = () => {
-    if (editingEmployee) {
-      setEmployees(employees.map(e => e.id === editingEmployee.id ? editingEmployee : e));
-      setEditingEmployee(null);
-    } else if (isAddingEmployee) {
-      const id = Date.now().toString();
-      setEmployees([{ ...newEmployee, id }, ...employees]);
-      setNewEmployee(initialNewEmployee);
-      setIsAddingEmployee(false);
+  const handleSaveEmployee = async () => {
+    try {
+      if (editingEmployee) {
+        const updated = await usersService.update(editingEmployee.id, editingEmployee);
+        setEmployees(employees.map(e => e.id === editingEmployee.id ? updated : e));
+        setEditingEmployee(null);
+      } else if (isAddingEmployee && newEmployee.name && newEmployee.email) {
+        const created = await usersService.create(newEmployee as any);
+        setEmployees([created, ...employees]);
+        setNewEmployee(initialNewEmployee);
+        setIsAddingEmployee(false);
+      }
+    } catch (error) {
+      console.error('Error saving employee:', error);
     }
   };
   
-  const handleDeleteEmployee = (id: string) => {
-    setEmployees(employees.filter(e => e.id !== id));
+  const handleDeleteEmployee = async (id: string) => {
+    try {
+      await usersService.delete(id);
+      setEmployees(employees.filter(e => e.id !== id));
+    } catch (error) {
+      console.error('Error deleting employee:', error);
+    }
   };
   
-  const renderEmployeeForm = (employee: Employee, isNew = false) => {
-    const updateEmployee = (field: keyof Employee, value: any) => {
+  const renderEmployeeForm = (employee: Partial<User>, isNew = false) => {
+    const updateEmployee = (field: keyof User, value: any) => {
       if (isNew) {
         setNewEmployee({ ...newEmployee, [field]: value });
       } else {
@@ -83,7 +109,7 @@ const Employees: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           <Input
             label="Nome"
-            value={employee.name}
+            value={employee.name || ''}
             onChange={(e) => updateEmployee('name', e.target.value)}
             fullWidth
             required
@@ -92,7 +118,7 @@ const Employees: React.FC = () => {
           <Input
             label="Email"
             type="email"
-            value={employee.email}
+            value={employee.email || ''}
             onChange={(e) => updateEmployee('email', e.target.value)}
             fullWidth
             required
@@ -100,7 +126,7 @@ const Employees: React.FC = () => {
           
           <Input
             label="Telefone"
-            value={employee.phone}
+            value={employee.phone || ''}
             onChange={(e) => updateEmployee('phone', e.target.value)}
             fullWidth
             required
@@ -112,7 +138,7 @@ const Employees: React.FC = () => {
               { value: 'gestor', label: 'Gestor' },
               { value: 'funcionario', label: 'Funcionário' }
             ]}
-            value={employee.role}
+            value={employee.role || 'funcionario'}
             onChange={(value) => updateEmployee('role', value as 'gestor' | 'funcionario')}
             fullWidth
             required
@@ -121,8 +147,8 @@ const Employees: React.FC = () => {
           <Input
             label="Data de Admissão"
             type="date"
-            value={employee.hireDate}
-            onChange={(e) => updateEmployee('hireDate', e.target.value)}
+            value={employee.hire_date || ''}
+            onChange={(e) => updateEmployee('hire_date', e.target.value)}
             fullWidth
             required
           />
@@ -140,6 +166,18 @@ const Employees: React.FC = () => {
       </Card>
     );
   };
+  
+  if (loading) {
+    return (
+      <Layout title="Funcionários">
+        <Card>
+          <div className="text-center py-8 text-gray-400">
+            <p>Carregando funcionários...</p>
+          </div>
+        </Card>
+      </Layout>
+    );
+  }
   
   return (
     <Layout title="Funcionários">
@@ -199,7 +237,7 @@ const Employees: React.FC = () => {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-sm">
-                    {new Date(employee.hireDate).toLocaleDateString('pt-BR')}
+                    {employee.hire_date ? new Date(employee.hire_date).toLocaleDateString('pt-BR') : '-'}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center space-x-2">

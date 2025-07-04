@@ -1,49 +1,46 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Layout from '../components/layout/Layout';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import { Search, UserPlus, Edit, Trash2, Lock, Save, X } from 'lucide-react';
-import { employees } from '../data/mockData';
-
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  role: 'gestor' | 'funcionario';
-  isActive: boolean;
-  lastLogin?: string;
-}
+import { usersService, type User } from '../services/database';
 
 const UserManagement: React.FC = () => {
-  // Generate mock users from employees
-  const initialUsers: User[] = employees.map(emp => ({
-    id: emp.id,
-    name: emp.name,
-    email: emp.email,
-    role: emp.role,
-    isActive: true,
-    lastLogin: new Date(Date.now() - Math.random() * 10000000000).toISOString()
-  }));
-  
-  const [users, setUsers] = useState<User[]>(initialUsers);
+  const [users, setUsers] = useState<User[]>([]);
   const [search, setSearch] = useState('');
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [isAddingUser, setIsAddingUser] = useState(false);
   const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [loading, setLoading] = useState(true);
   
-  const initialNewUser: User = {
-    id: '',
+  const initialNewUser: Partial<User> = {
     name: '',
     email: '',
     role: 'funcionario',
-    isActive: true
+    is_active: true
   };
   
-  const [newUser, setNewUser] = useState<User>(initialNewUser);
+  const [newUser, setNewUser] = useState<Partial<User>>(initialNewUser);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  
+  // Fetch users on component mount
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const data = await usersService.getAll();
+        setUsers(data);
+      } catch (error) {
+        console.error('Error fetching users:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchUsers();
+  }, []);
   
   // Filter users based on search
   const filteredUsers = users.filter((user) =>
@@ -51,20 +48,30 @@ const UserManagement: React.FC = () => {
     user.email.toLowerCase().includes(search.toLowerCase())
   );
   
-  const handleSaveUser = () => {
-    if (editingUser) {
-      setUsers(users.map(u => u.id === editingUser.id ? editingUser : u));
-      setEditingUser(null);
-    } else if (isAddingUser) {
-      const id = Date.now().toString();
-      setUsers([{ ...newUser, id }, ...users]);
-      setNewUser(initialNewUser);
-      setIsAddingUser(false);
+  const handleSaveUser = async () => {
+    try {
+      if (editingUser) {
+        const updated = await usersService.update(editingUser.id, editingUser);
+        setUsers(users.map(u => u.id === editingUser.id ? updated : u));
+        setEditingUser(null);
+      } else if (isAddingUser && newUser.name && newUser.email) {
+        const created = await usersService.create(newUser as any);
+        setUsers([created, ...users]);
+        setNewUser(initialNewUser);
+        setIsAddingUser(false);
+      }
+    } catch (error) {
+      console.error('Error saving user:', error);
     }
   };
   
-  const handleDeleteUser = (id: string) => {
-    setUsers(users.filter(u => u.id !== id));
+  const handleDeleteUser = async (id: string) => {
+    try {
+      await usersService.delete(id);
+      setUsers(users.filter(u => u.id !== id));
+    } catch (error) {
+      console.error('Error deleting user:', error);
+    }
   };
   
   const handleResetPassword = () => {
@@ -76,7 +83,7 @@ const UserManagement: React.FC = () => {
     }, 1000);
   };
   
-  const renderUserForm = (user: User, isNew = false) => {
+  const renderUserForm = (user: Partial<User>, isNew = false) => {
     const updateUser = (field: keyof User, value: any) => {
       if (isNew) {
         setNewUser({ ...newUser, [field]: value });
@@ -111,7 +118,7 @@ const UserManagement: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           <Input
             label="Nome"
-            value={user.name}
+            value={user.name || ''}
             onChange={(e) => updateUser('name', e.target.value)}
             fullWidth
             required
@@ -120,7 +127,7 @@ const UserManagement: React.FC = () => {
           <Input
             label="Email"
             type="email"
-            value={user.email}
+            value={user.email || ''}
             onChange={(e) => updateUser('email', e.target.value)}
             fullWidth
             required
@@ -132,7 +139,7 @@ const UserManagement: React.FC = () => {
               { value: 'gestor', label: 'Gestor' },
               { value: 'funcionario', label: 'Funcionário' }
             ]}
-            value={user.role}
+            value={user.role || 'funcionario'}
             onChange={(value) => updateUser('role', value as 'gestor' | 'funcionario')}
             fullWidth
             required
@@ -144,8 +151,8 @@ const UserManagement: React.FC = () => {
               { value: 'true', label: 'Ativo' },
               { value: 'false', label: 'Inativo' }
             ]}
-            value={user.isActive.toString()}
-            onChange={(value) => updateUser('isActive', value === 'true')}
+            value={user.is_active?.toString() || 'true'}
+            onChange={(value) => updateUser('is_active', value === 'true')}
             fullWidth
             required
           />
@@ -190,6 +197,18 @@ const UserManagement: React.FC = () => {
       </Card>
     );
   };
+  
+  if (loading) {
+    return (
+      <Layout title="Gerenciar Usuários">
+        <Card>
+          <div className="text-center py-8 text-gray-400">
+            <p>Carregando usuários...</p>
+          </div>
+        </Card>
+      </Layout>
+    );
+  }
   
   return (
     <Layout title="Gerenciar Usuários">
@@ -278,7 +297,7 @@ const UserManagement: React.FC = () => {
                 <th className="px-4 py-2 text-left font-medium text-gray-400">Email</th>
                 <th className="px-4 py-2 text-left font-medium text-gray-400">Cargo</th>
                 <th className="px-4 py-2 text-left font-medium text-gray-400">Status</th>
-                <th className="px-4 py-2 text-left font-medium text-gray-400">Último Acesso</th>
+                <th className="px-4 py-2 text-left font-medium text-gray-400">Criado em</th>
                 <th className="px-4 py-2 text-left font-medium text-gray-400">Ações</th>
               </tr>
             </thead>
@@ -298,15 +317,15 @@ const UserManagement: React.FC = () => {
                   </td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      user.isActive
+                      user.is_active
                         ? 'bg-green-100 text-green-800' 
                         : 'bg-red-100 text-red-800'
                     }`}>
-                      {user.isActive ? 'Ativo' : 'Inativo'}
+                      {user.is_active ? 'Ativo' : 'Inativo'}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-sm">
-                    {user.lastLogin ? new Date(user.lastLogin).toLocaleString('pt-BR') : 'Nunca'}
+                    {user.created_at ? new Date(user.created_at).toLocaleDateString('pt-BR') : '-'}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center space-x-2">
