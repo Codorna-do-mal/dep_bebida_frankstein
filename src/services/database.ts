@@ -752,12 +752,9 @@ export const dashboardService = {
       }
       
       // Get low stock products
-      const lowStockResult = await executeQuery(() =>
-        supabase
-          .from('products')
-          .select('*')
-          .eq('is_active', true)
-          .lte('stock_quantity', 10)
+const lowStockResult = await executeQuery(() =>
+  supabase
+    .rpc('get_low_stock_products') // Consome a função
       );
       
       if (lowStockResult.error) {
