@@ -157,26 +157,27 @@ export const useAuthStore = create<AuthState>()(
         } catch (error) {
           console.error('Logout error:', error);
         }
+        localStorage.removeItem('auth-storage');
         set({ isAuthenticated: false, user: null, connectionError: false });
       },
 
-      checkAuth: async () => {
+     checkAuth: async () => {
         try {
-          // Check connection first
           const connected = await get().checkConnection();
           if (!connected) {
+            localStorage.removeItem('auth-storage');
             set({ isAuthenticated: false, user: null });
             return;
           }
 
           const { data: { session } } = await supabase.auth.getSession();
-          
+
           if (!session) {
+            localStorage.removeItem('auth-storage');
             set({ isAuthenticated: false, user: null, connectionError: false });
             return;
           }
 
-          // Get user data from our users table
           const { data: userData, error } = await supabase
             .from('users')
             .select('*')
@@ -185,6 +186,7 @@ export const useAuthStore = create<AuthState>()(
 
           if (error || !userData || !userData.is_active) {
             await supabase.auth.signOut();
+            localStorage.removeItem('auth-storage');
             set({ isAuthenticated: false, user: null, connectionError: false });
             return;
           }
@@ -200,32 +202,26 @@ export const useAuthStore = create<AuthState>()(
           set({ isAuthenticated: true, user, connectionError: false });
         } catch (error: any) {
           console.error('Auth check error:', error);
-          
-          // Check if it's a connection error
-          if (error.message?.includes('Failed to fetch') || 
-              error.message?.includes('NetworkError')) {
-            set({ connectionError: true });
-          }
-          
+          localStorage.removeItem('auth-storage');
           set({ isAuthenticated: false, user: null });
         }
       },
     }),
     {
       name: 'auth-storage',
-      partialize: (state) => ({ 
-        isAuthenticated: state.isAuthenticated, 
-        user: state.user 
+      partialize: (state) => ({
+        isAuthenticated: state.isAuthenticated,
+        user: state.user,
       }),
     }
   )
 );
 
-// Listen for auth changes
 supabase.auth.onAuthStateChange(async (event, session) => {
   const { checkAuth } = useAuthStore.getState();
-  
+
   if (event === 'SIGNED_OUT' || !session) {
+    localStorage.removeItem('auth-storage');
     useAuthStore.setState({ isAuthenticated: false, user: null, connectionError: false });
   } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
     await checkAuth();
