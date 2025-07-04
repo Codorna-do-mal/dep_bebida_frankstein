@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Layout from '../components/layout/Layout';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
-import { Search, ArrowUp, ArrowDown, Plus, X } from 'lucide-react';
-import { products, stockMovements as mockMovements } from '../data/mockData';
-import { StockMovement } from '../types';
+import { Search, ArrowUp, ArrowDown, Plus, X, Loader2 } from 'lucide-react';
+import { Product, StockMovement } from '../types';
+import { productsService, stockMovementsService } from '../services/database';
 import { useAuthStore } from '../stores/authStore';
 
 const Inventory: React.FC = () => {
@@ -14,7 +14,9 @@ const Inventory: React.FC = () => {
   const [selectedProduct, setSelectedProduct] = useState('');
   const [selectedType, setSelectedType] = useState('');
   const [isAddingMovement, setIsAddingMovement] = useState(false);
-  const [stockMovements, setStockMovements] = useState<StockMovement[]>(mockMovements);
+  const [stockMovements, setStockMovements] = useState<StockMovement[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
   
   const { user } = useAuthStore();
   
@@ -24,10 +26,32 @@ const Inventory: React.FC = () => {
     quantity: 1,
     reason: '',
   });
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const [productsData, movementsData] = await Promise.all([
+        productsService.getAll(),
+        stockMovementsService.getAll()
+      ]);
+      setProducts(productsData);
+      setStockMovements(movementsData);
+    } catch (error) {
+      console.error('Error loading data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
   
   // Filter movements based on search, product, and type
   const filteredMovements = stockMovements.filter((movement) => {
-    const matchesSearch = movement.productName.toLowerCase().includes(search.toLowerCase());
+    const product = products.find(p => p.id === movement.productId);
+    const productName = product?.name || '';
+    const matchesSearch = productName.toLowerCase().includes(search.toLowerCase());
     const matchesProduct = selectedProduct ? movement.productId === selectedProduct : true;
     const matchesType = selectedType ? movement.type === selectedType : true;
     
@@ -45,8 +69,8 @@ const Inventory: React.FC = () => {
     { value: 'out', label: 'Saída' }
   ];
   
-  const handleAddMovement = () => {
-    if (!newMovement.productId || !newMovement.quantity || !newMovement.reason) {
+  const handleAddMovement = async () => {
+    if (!newMovement.productId || !newMovement.quantity || !newMovement.reason || !user) {
       return;
     }
     
@@ -55,27 +79,46 @@ const Inventory: React.FC = () => {
     if (!product) {
       return;
     }
-    
-    const movement: StockMovement = {
-      id: Date.now().toString(),
-      productId: newMovement.productId,
-      productName: product.name,
-      type: newMovement.type as 'in' | 'out',
-      quantity: newMovement.quantity as number,
-      reason: newMovement.reason as string,
-      date: new Date().toISOString(),
-      employeeId: user?.id || '',
-    };
-    
-    setStockMovements([movement, ...stockMovements]);
-    setNewMovement({
-      productId: '',
-      type: 'in',
-      quantity: 1,
-      reason: '',
-    });
-    setIsAddingMovement(false);
+
+    try {
+      const movementData = {
+        productId: newMovement.productId,
+        type: newMovement.type as 'in' | 'out',
+        quantity: newMovement.quantity as number,
+        reason: newMovement.reason as string,
+        employeeId: user.id,
+      };
+
+      const createdMovement = await stockMovementsService.create(movementData);
+      
+      // Add the new movement to the local state
+      setStockMovements([createdMovement, ...stockMovements]);
+      
+      // Reset form
+      setNewMovement({
+        productId: '',
+        type: 'in',
+        quantity: 1,
+        reason: '',
+      });
+      setIsAddingMovement(false);
+    } catch (error) {
+      console.error('Error creating stock movement:', error);
+    }
   };
+
+  if (loading) {
+    return (
+      <Layout title="Estoque">
+        <Card>
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="animate-spin mr-2" size={24} />
+            <span>Carregando dados...</span>
+          </div>
+        </Card>
+      </Layout>
+    );
+  }
   
   return (
     <Layout title="Estoque">
@@ -193,33 +236,36 @@ const Inventory: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {filteredMovements.map((movement) => (
-                <tr key={movement.id} className="border-b border-dark-lighter hover:bg-dark-lighter">
-                  <td className="px-4 py-3 text-sm">
-                    {new Date(movement.date).toLocaleString('pt-BR')}
-                  </td>
-                  <td className="px-4 py-3">{movement.productName}</td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      movement.type === 'in' 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-red-100 text-red-800'
-                    }`}>
-                      {movement.type === 'in' ? (
-                        <><ArrowUp size={12} className="mr-1" />Entrada</>
-                      ) : (
-                        <><ArrowDown size={12} className="mr-1" />Saída</>
-                      )}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-sm font-medium">
-                    {movement.quantity}
-                  </td>
-                  <td className="px-4 py-3 text-sm">
-                    {movement.reason}
-                  </td>
-                </tr>
-              ))}
+              {filteredMovements.map((movement) => {
+                const product = products.find(p => p.id === movement.productId);
+                return (
+                  <tr key={movement.id} className="border-b border-dark-lighter hover:bg-dark-lighter">
+                    <td className="px-4 py-3 text-sm">
+                      {new Date(movement.createdAt || movement.date).toLocaleString('pt-BR')}
+                    </td>
+                    <td className="px-4 py-3">{product?.name || 'Produto não encontrado'}</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        movement.type === 'in' 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-red-100 text-red-800'
+                      }`}>
+                        {movement.type === 'in' ? (
+                          <><ArrowUp size={12} className="mr-1" />Entrada</>
+                        ) : (
+                          <><ArrowDown size={12} className="mr-1" />Saída</>
+                        )}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm font-medium">
+                      {movement.quantity}
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      {movement.reason}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
           
