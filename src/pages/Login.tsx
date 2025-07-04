@@ -14,7 +14,7 @@ const Login: React.FC = () => {
   const navigate = useNavigate();
   
   useEffect(() => {
-    // Check if user is already authenticated
+    localStorage.removeItem('auth-storage'); // limpa authStorage ao entrar na tela de login
     checkAuth();
   }, [checkAuth]);
   
