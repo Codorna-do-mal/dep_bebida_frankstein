@@ -22,14 +22,14 @@ const Products: React.FC = () => {
   const initialNewProduct = {
     name: '',
     category_id: '',
-    price: 0,
-    cost: 0,
+    price: '',
+    cost: '',
     description: '',
-    image_url: 'https://images.pexels.com/photos/1552630/pexels-photo-1552630.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=750&w=1260',
+    image_url: '',
     volume: '',
     barcode: '',
-    stock_quantity: 0,
-    min_stock_quantity: 0
+    stock_quantity: '',
+    min_stock_quantity: ''
   };
   
   const [newProduct, setNewProduct] = useState(initialNewProduct);
