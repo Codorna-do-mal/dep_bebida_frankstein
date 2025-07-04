@@ -1,64 +1,129 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Layout from '../components/layout/Layout';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import { Search, Plus, Edit, Trash2, ImageIcon, Save, X } from 'lucide-react';
-import { products as mockProducts, categories } from '../data/mockData';
-import { Product } from '../types';
+import { productsService, categoriesService, type Product, type Category } from '../services/database';
+import { useAuthStore } from '../stores/authStore';
 
 const Products: React.FC = () => {
-  const [products, setProducts] = useState<Product[]>(mockProducts);
+  const { user } = useAuthStore();
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isAddingProduct, setIsAddingProduct] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   
-  const initialNewProduct: Product = {
-    id: '',
+  const initialNewProduct = {
     name: '',
-    category: categories[0],
+    category_id: '',
     price: 0,
     cost: 0,
     description: '',
-    imageUrl: 'https://images.pexels.com/photos/1552630/pexels-photo-1552630.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=750&w=1260',
+    image_url: 'https://images.pexels.com/photos/1552630/pexels-photo-1552630.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=750&w=1260',
     volume: '',
     barcode: '',
-    stockQuantity: 0,
-    minStockQuantity: 0
+    stock_quantity: 0,
+    min_stock_quantity: 0
   };
   
-  const [newProduct, setNewProduct] = useState<Product>(initialNewProduct);
+  const [newProduct, setNewProduct] = useState(initialNewProduct);
+  
+  useEffect(() => {
+    loadData();
+  }, []);
+  
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const [productsData, categoriesData] = await Promise.all([
+        productsService.getAll(),
+        categoriesService.getAll()
+      ]);
+      
+      setProducts(productsData);
+      setCategories(categoriesData);
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
   
   // Filter products based on search and category
   const filteredProducts = products.filter((product) => {
     const matchesSearch = product.name.toLowerCase().includes(search.toLowerCase()) ||
                          (product.barcode && product.barcode.includes(search));
-    const matchesCategory = selectedCategory ? product.category === selectedCategory : true;
+    const matchesCategory = selectedCategory ? product.category_id === selectedCategory : true;
     
     return matchesSearch && matchesCategory;
   });
   
   const categoryOptions = [
     { value: '', label: 'Todas as categorias' },
-    ...categories.map(category => ({ value: category, label: category }))
+    ...categories.map(category => ({ value: category.id, label: category.name }))
   ];
   
-  const handleSaveProduct = () => {
-    if (editingProduct) {
-      setProducts(products.map(p => p.id === editingProduct.id ? editingProduct : p));
-      setEditingProduct(null);
-    } else if (isAddingProduct) {
-      const id = Date.now().toString();
-      setProducts([{ ...newProduct, id }, ...products]);
-      setNewProduct(initialNewProduct);
-      setIsAddingProduct(false);
+  const handleSaveProduct = async () => {
+    if (!user) return;
+    
+    try {
+      setSaving(true);
+      
+      if (editingProduct) {
+        const updated = await productsService.update(editingProduct.id, {
+          name: editingProduct.name,
+          category_id: editingProduct.category_id,
+          price: editingProduct.price,
+          cost: editingProduct.cost,
+          description: editingProduct.description,
+          image_url: editingProduct.image_url,
+          volume: editingProduct.volume,
+          barcode: editingProduct.barcode,
+          stock_quantity: editingProduct.stock_quantity,
+          min_stock_quantity: editingProduct.min_stock_quantity
+        });
+        
+        setProducts(products.map(p => p.id === updated.id ? { ...updated, category_name: categories.find(c => c.id === updated.category_id)?.name } : p));
+        setEditingProduct(null);
+      } else if (isAddingProduct) {
+        const created = await productsService.create({
+          ...newProduct,
+          employee_id: user.id
+        });
+        
+        const productWithCategory = {
+          ...created,
+          category_name: categories.find(c => c.id === created.category_id)?.name
+        };
+        
+        setProducts([productWithCategory, ...products]);
+        setNewProduct(initialNewProduct);
+        setIsAddingProduct(false);
+      }
+    } catch (error) {
+      console.error('Erro ao salvar produto:', error);
+      alert('Erro ao salvar produto. Tente novamente.');
+    } finally {
+      setSaving(false);
     }
   };
   
-  const handleDeleteProduct = (id: string) => {
-    setProducts(products.filter(p => p.id !== id));
+  const handleDeleteProduct = async (id: string) => {
+    if (!confirm('Tem certeza que deseja excluir este produto?')) return;
+    
+    try {
+      await productsService.delete(id);
+      setProducts(products.filter(p => p.id !== id));
+    } catch (error) {
+      console.error('Erro ao excluir produto:', error);
+      alert('Erro ao excluir produto. Tente novamente.');
+    }
   };
   
   const formatPrice = (price: number) => {
@@ -68,8 +133,8 @@ const Products: React.FC = () => {
     });
   };
   
-  const renderProductForm = (product: Product, isNew = false) => {
-    const updateProduct = (field: keyof Product, value: any) => {
+  const renderProductForm = (product: any, isNew = false) => {
+    const updateProduct = (field: string, value: any) => {
       if (isNew) {
         setNewProduct({ ...newProduct, [field]: value });
       } else {
@@ -111,9 +176,9 @@ const Products: React.FC = () => {
           
           <Select
             label="Categoria"
-            options={categories.map(c => ({ value: c, label: c }))}
-            value={product.category}
-            onChange={(value) => updateProduct('category', value)}
+            options={categories.map(c => ({ value: c.id, label: c.name }))}
+            value={product.category_id}
+            onChange={(value) => updateProduct('category_id', value)}
             fullWidth
             required
           />
@@ -159,8 +224,8 @@ const Products: React.FC = () => {
             label="Quantidade em Estoque"
             type="number"
             min="0"
-            value={product.stockQuantity}
-            onChange={(e) => updateProduct('stockQuantity', parseInt(e.target.value) || 0)}
+            value={product.stock_quantity}
+            onChange={(e) => updateProduct('stock_quantity', parseInt(e.target.value) || 0)}
             fullWidth
             required
           />
@@ -169,8 +234,8 @@ const Products: React.FC = () => {
             label="Estoque Mínimo"
             type="number"
             min="0"
-            value={product.minStockQuantity}
-            onChange={(e) => updateProduct('minStockQuantity', parseInt(e.target.value) || 0)}
+            value={product.min_stock_quantity}
+            onChange={(e) => updateProduct('min_stock_quantity', parseInt(e.target.value) || 0)}
             fullWidth
             required
           />
@@ -178,7 +243,7 @@ const Products: React.FC = () => {
           <div className="md:col-span-2">
             <Input
               label="Descrição"
-              value={product.description}
+              value={product.description || ''}
               onChange={(e) => updateProduct('description', e.target.value)}
               fullWidth
             />
@@ -190,15 +255,15 @@ const Products: React.FC = () => {
             </label>
             <div className="flex gap-3">
               <Input
-                value={product.imageUrl}
-                onChange={(e) => updateProduct('imageUrl', e.target.value)}
+                value={product.image_url || ''}
+                onChange={(e) => updateProduct('image_url', e.target.value)}
                 placeholder="https://exemplo.com/imagem.jpg"
                 fullWidth
               />
               <div className="h-12 w-12 bg-dark-lighter rounded flex items-center justify-center overflow-hidden">
-                {product.imageUrl ? (
+                {product.image_url ? (
                   <img 
-                    src={product.imageUrl} 
+                    src={product.image_url} 
                     alt={product.name} 
                     className="h-full w-full object-cover"
                   />
@@ -214,7 +279,8 @@ const Products: React.FC = () => {
           <Button 
             onClick={handleSaveProduct} 
             icon={<Save size={18} />}
-            disabled={!product.name || product.price <= 0 || product.stockQuantity < 0}
+            loading={saving}
+            disabled={!product.name || product.price <= 0 || product.stock_quantity < 0 || !product.category_id}
           >
             Salvar
           </Button>
@@ -222,6 +288,16 @@ const Products: React.FC = () => {
       </Card>
     );
   };
+  
+  if (loading) {
+    return (
+      <Layout title="Produtos">
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-neon"></div>
+        </div>
+      </Layout>
+    );
+  }
   
   return (
     <Layout title="Produtos">
@@ -277,7 +353,7 @@ const Products: React.FC = () => {
                     <div className="flex items-center">
                       <div className="h-10 w-10 rounded overflow-hidden mr-3">
                         <img
-                          src={product.imageUrl}
+                          src={product.image_url || ''}
                           alt={product.name}
                           className="h-full w-full object-cover"
                         />
@@ -288,16 +364,16 @@ const Products: React.FC = () => {
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-sm">{product.category}</td>
+                  <td className="px-4 py-3 text-sm">{product.category_name}</td>
                   <td className="px-4 py-3 text-sm font-medium text-neon">
                     {formatPrice(product.price)}
                   </td>
                   <td className="px-4 py-3 text-sm">
                     <div className="flex items-center">
-                      <span className={product.stockQuantity <= product.minStockQuantity ? 'text-red-500' : ''}>
-                        {product.stockQuantity}
+                      <span className={product.stock_quantity <= product.min_stock_quantity ? 'text-red-500' : ''}>
+                        {product.stock_quantity}
                       </span>
-                      {product.stockQuantity <= product.minStockQuantity && (
+                      {product.stock_quantity <= product.min_stock_quantity && (
                         <span className="ml-2 px-1.5 py-0.5 text-xs bg-red-500/20 text-red-400 rounded">
                           Baixo
                         </span>

@@ -1,3 +1,4 @@
+// Legacy types for compatibility - now using database types from services/database.ts
 export interface Product {
   id: string;
   name: string;

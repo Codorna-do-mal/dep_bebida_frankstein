@@ -1,13 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Trash2, Plus, Minus, ShoppingCart, X } from 'lucide-react';
 import { useCartStore } from '../../stores/cartStore';
-import Button from '../ui/Button';
 import { useAuthStore } from '../../stores/authStore';
+import { salesService, cashRegisterService, paymentMethodsService, type PaymentMethod } from '../../services/database';
+import Button from '../ui/Button';
 import { format } from 'date-fns';
-import { paymentMethods } from '../../data/mockData';
 
 interface CartProps {
-  onCheckout: (saleData: any) => void;
+  onCheckout: () => void;
 }
 
 const Cart: React.FC<CartProps> = ({ onCheckout }) => {
@@ -15,8 +15,26 @@ const Cart: React.FC<CartProps> = ({ onCheckout }) => {
   const { user } = useAuthStore();
   const [discount, setDiscount] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState('dinheiro');
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [cashReceived, setCashReceived] = useState('');
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  
+  useEffect(() => {
+    loadPaymentMethods();
+  }, []);
+  
+  const loadPaymentMethods = async () => {
+    try {
+      const methods = await paymentMethodsService.getAll();
+      setPaymentMethods(methods);
+      if (methods.length > 0) {
+        setPaymentMethod(methods[0].id);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar métodos de pagamento:', error);
+    }
+  };
   
   const formatPrice = (price: number) => {
     return price.toLocaleString('pt-BR', {
@@ -34,33 +52,48 @@ const Cart: React.FC<CartProps> = ({ onCheckout }) => {
     }
   };
   
-  const handleCheckout = () => {
-    const finalAmount = totalAmount() - discount;
+  const handleCheckout = async () => {
+    if (!user) return;
     
-    const saleData = {
-      id: Date.now().toString(),
-      items: items.map(item => ({
-        productId: item.id,
-        productName: item.name,
-        quantity: item.quantity,
-        unitPrice: item.price,
-        totalPrice: item.price * item.quantity
-      })),
-      totalAmount: totalAmount(),
-      discount,
-      finalAmount,
-      paymentMethod,
-      change: paymentMethod === 'dinheiro' ? parseFloat(cashReceived) - finalAmount : undefined,
-      date: format(new Date(), "yyyy-MM-dd'T'HH:mm:ss"),
-      employeeId: user?.id || '',
-      employeeName: user?.name || ''
-    };
-    
-    onCheckout(saleData);
-    clearCart();
-    setDiscount(0);
-    setCashReceived('');
-    setIsCheckoutOpen(false);
+    try {
+      setLoading(true);
+      
+      const finalAmount = totalAmount() - discount;
+      
+      // Get current cash register
+      const currentCashRegister = await cashRegisterService.getCurrent();
+      
+      const saleData = {
+        items: items.map(item => ({
+          product_id: item.id,
+          product_name: item.name,
+          quantity: item.quantity,
+          unit_price: item.price,
+          total_price: item.price * item.quantity
+        })),
+        total_amount: totalAmount(),
+        discount,
+        final_amount: finalAmount,
+        payment_method: paymentMethod,
+        change_amount: paymentMethod === 'dinheiro' ? parseFloat(cashReceived) - finalAmount : undefined,
+        cash_register_id: currentCashRegister?.id,
+        employee_id: user.id
+      };
+      
+      await salesService.create(saleData);
+      
+      clearCart();
+      setDiscount(0);
+      setCashReceived('');
+      setIsCheckoutOpen(false);
+      onCheckout();
+      
+    } catch (error) {
+      console.error('Erro ao finalizar venda:', error);
+      alert('Erro ao finalizar venda. Tente novamente.');
+    } finally {
+      setLoading(false);
+    }
   };
   
   const handleDiscountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -119,6 +152,7 @@ const Cart: React.FC<CartProps> = ({ onCheckout }) => {
                   <button
                     onClick={() => handleUpdateQuantity(item.id, item.quantity, 1)}
                     className="bg-dark hover:bg-dark-light p-1 rounded"
+                    disabled={item.quantity >= item.stockQuantity}
                   >
                     <Plus size={16} />
                   </button>
@@ -211,6 +245,7 @@ const Cart: React.FC<CartProps> = ({ onCheckout }) => {
                     variant="secondary"
                     onClick={() => setIsCheckoutOpen(false)}
                     className="flex-1"
+                    disabled={loading}
                   >
                     Cancelar
                   </Button>
@@ -218,9 +253,11 @@ const Cart: React.FC<CartProps> = ({ onCheckout }) => {
                   <Button
                     onClick={handleCheckout}
                     className="flex-1"
+                    loading={loading}
                     disabled={
-                      paymentMethod === 'dinheiro' &&
-                      (parseFloat(cashReceived) < (totalAmount() - discount) || !cashReceived)
+                      loading ||
+                      (paymentMethod === 'dinheiro' &&
+                      (parseFloat(cashReceived) < (totalAmount() - discount) || !cashReceived))
                     }
                   >
                     Finalizar

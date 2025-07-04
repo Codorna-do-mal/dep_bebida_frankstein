@@ -1,42 +1,76 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Layout from '../components/layout/Layout';
 import { Search, Filter, CheckCircle } from 'lucide-react';
-import { products, categories, sales as mockSales } from '../data/mockData';
+import { productsService, categoriesService, type Product, type Category } from '../services/database';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import ProductCard from '../components/sales/ProductCard';
 import Cart from '../components/sales/Cart';
-import { Sale } from '../types';
 
 const Sales: React.FC = () => {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
-  const [sales, setSales] = useState<Sale[]>(mockSales);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+  
+  useEffect(() => {
+    loadData();
+  }, []);
+  
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const [productsData, categoriesData] = await Promise.all([
+        productsService.getAll(),
+        categoriesService.getAll()
+      ]);
+      
+      setProducts(productsData);
+      setCategories(categoriesData);
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
   
   // Filter products based on search and category
   const filteredProducts = products.filter((product) => {
     const matchesSearch = product.name.toLowerCase().includes(search.toLowerCase()) ||
                          (product.barcode && product.barcode.includes(search));
-    const matchesCategory = selectedCategory ? product.category === selectedCategory : true;
+    const matchesCategory = selectedCategory ? product.category_id === selectedCategory : true;
     
-    return matchesSearch && matchesCategory;
+    return matchesSearch && matchesCategory && product.stock_quantity > 0;
   });
   
   const categoryOptions = [
     { value: '', label: 'Todas as categorias' },
-    ...categories.map(category => ({ value: category, label: category }))
+    ...categories.map(category => ({ value: category.id, label: category.name }))
   ];
   
-  const handleSaleComplete = (saleData: Sale) => {
-    setSales([saleData, ...sales]);
+  const handleSaleComplete = () => {
     setShowSuccessMessage(true);
+    
+    // Reload products to update stock
+    loadData();
     
     // Hide success message after 3 seconds
     setTimeout(() => {
       setShowSuccessMessage(false);
     }, 3000);
   };
+  
+  if (loading) {
+    return (
+      <Layout title="Vendas">
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-neon"></div>
+        </div>
+      </Layout>
+    );
+  }
   
   return (
     <Layout title="Vendas">
