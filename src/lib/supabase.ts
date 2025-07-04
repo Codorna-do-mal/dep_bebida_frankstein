@@ -13,9 +13,113 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: true
-  }
+    detectSessionInUrl: true,
+    flowType: 'pkce'
+  },
+  global: {
+    headers: {
+      'x-my-custom-header': 'my-app-name',
+    },
+  },
+  db: {
+    schema: 'public',
+  },
+  realtime: {
+    params: {
+      eventsPerSecond: 10,
+    },
+  },
 });
+
+// Add connection monitoring and retry logic
+let isConnected = true;
+let retryCount = 0;
+const maxRetries = 3;
+
+// Function to test connection
+export const testConnection = async (): Promise<boolean> => {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('id')
+      .limit(1);
+    
+    if (error) {
+      console.error('Connection test failed:', error);
+      return false;
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Connection test error:', error);
+    return false;
+  }
+};
+
+// Function to handle connection retry
+export const retryConnection = async (): Promise<boolean> => {
+  if (retryCount >= maxRetries) {
+    console.error('Max retries reached. Connection failed.');
+    return false;
+  }
+  
+  retryCount++;
+  console.log(`Attempting to reconnect... (${retryCount}/${maxRetries})`);
+  
+  // Wait before retry
+  await new Promise(resolve => setTimeout(resolve, 2000 * retryCount));
+  
+  const connected = await testConnection();
+  
+  if (connected) {
+    console.log('Reconnection successful');
+    retryCount = 0;
+    isConnected = true;
+    return true;
+  }
+  
+  return retryConnection();
+};
+
+// Enhanced query wrapper with retry logic
+export const executeQuery = async <T>(
+  queryFn: () => Promise<{ data: T | null; error: any }>
+): Promise<{ data: T | null; error: any }> => {
+  try {
+    const result = await queryFn();
+    
+    // If query succeeds, reset retry count
+    if (!result.error) {
+      retryCount = 0;
+      isConnected = true;
+    }
+    
+    return result;
+  } catch (error: any) {
+    console.error('Query execution error:', error);
+    
+    // Check if it's a connection error
+    if (error.message?.includes('Failed to fetch') || 
+        error.message?.includes('NetworkError') ||
+        error.code === 'PGRST301') {
+      
+      isConnected = false;
+      
+      // Try to reconnect
+      const reconnected = await retryConnection();
+      
+      if (reconnected) {
+        // Retry the original query
+        return queryFn();
+      }
+    }
+    
+    return { data: null, error };
+  }
+};
+
+// Monitor connection status
+export const getConnectionStatus = () => isConnected;
 
 // Database types
 export interface Database {

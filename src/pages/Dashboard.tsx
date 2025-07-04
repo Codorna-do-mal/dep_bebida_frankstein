@@ -5,7 +5,7 @@ import { useAuthStore } from '../stores/authStore';
 import { 
   ShoppingCart, TrendingUp, Package, DollarSign, ShoppingBag, AlertTriangle
 } from 'lucide-react';
-import { dashboardService, type Product, type Sale, type CashRegister } from '../services/database';
+import { dashboardService, productsService, type Product, type Sale, type CashRegister } from '../services/database';
 
 const Dashboard: React.FC = () => {
   const { user } = useAuthStore();
@@ -19,6 +19,7 @@ const Dashboard: React.FC = () => {
   const [recentSales, setRecentSales] = useState<Sale[]>([]);
   const [lowStockProducts, setLowStockProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   
   // Format currency
   const formatCurrency = (value: number) => {
@@ -32,6 +33,7 @@ const Dashboard: React.FC = () => {
     const loadDashboardData = async () => {
       try {
         setLoading(true);
+        setError(null);
         
         // Load dashboard stats
         const dashboardStats = await dashboardService.getStats();
@@ -42,17 +44,13 @@ const Dashboard: React.FC = () => {
         setRecentSales(sales);
         
         // Load low stock products
-        const { data: products } = await supabase
-          .from('products')
-          .select('*')
-          .eq('is_active', true)
-          .filter('stock_quantity', 'lte', 'min_stock_quantity')
-          .limit(5);
+        const products = await productsService.getAll();
+        const lowStock = products.filter(p => p.stock_quantity <= p.min_stock_quantity).slice(0, 5);
+        setLowStockProducts(lowStock);
         
-        setLowStockProducts(products || []);
-        
-      } catch (error) {
+      } catch (error: any) {
         console.error('Erro ao carregar dados do dashboard:', error);
+        setError(error.message || 'Erro ao carregar dados do dashboard');
       } finally {
         setLoading(false);
       }
@@ -67,6 +65,26 @@ const Dashboard: React.FC = () => {
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-neon"></div>
         </div>
+      </Layout>
+    );
+  }
+
+  if (error) {
+    return (
+      <Layout title="Dashboard">
+        <Card>
+          <div className="text-center py-8">
+            <AlertTriangle className="mx-auto mb-4 text-red-500" size={48} />
+            <h3 className="text-lg font-medium mb-2">Erro ao carregar dados</h3>
+            <p className="text-gray-400 mb-4">{error}</p>
+            <button 
+              onClick={() => window.location.reload()} 
+              className="btn-primary"
+            >
+              Tentar novamente
+            </button>
+          </div>
+        </Card>
       </Layout>
     );
   }

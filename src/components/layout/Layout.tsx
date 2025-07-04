@@ -5,6 +5,7 @@ import {
   Home, ShoppingCart, Package, BarChart3, Users, CreditCard, 
   Settings, LogOut, ChevronRight, Menu, X, Beer
 } from 'lucide-react';
+import ConnectionStatus from '../ui/ConnectionStatus';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -41,6 +42,9 @@ const Layout: React.FC<LayoutProps> = ({ children, title }) => {
 
   return (
     <div className="flex h-screen bg-dark overflow-hidden">
+      {/* Connection status indicator */}
+      <ConnectionStatus />
+      
       {/* Mobile sidebar backdrop */}
       {isSidebarOpen && (
         <div 
